@@ -1,0 +1,222 @@
+/*
+  IoT Weather Station with Enhanced Web Interface
+  Created by: Mbavhalelo Mmbadi (ID: 217057659)
+  Features:
+  - Reads temperature/humidity from DHT22
+  - Displays data on 16x2 LCD
+  - Hosts a modern web dashboard
+  - Auto-refreshes data every 2 seconds
+*/
+
+// Include necessary libraries
+#include <WiFi.h>          // For WiFi connectivity
+#include <WebServer.h>     // For hosting web server
+#include <DHT.h>           // For DHT sensor operations
+#include <LiquidCrystal_I2C.h> // For LCD control
+
+// Sensor configuration
+#define DHTPIN 4           // GPIO pin connected to DHT22
+#define DHTTYPE DHT22      // Specify sensor type
+DHT dht(DHTPIN, DHTTYPE); // Initialize DHT sensor
+
+// LCD configuration (I2C address, columns, rows)
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Change 0x27 if LCD doesn't work
+
+// WiFi credentials (REPLACE WITH YOUR NETWORK INFO)
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+WebServer server(80);      // Create web server on port 80
+
+// Global variables to store sensor readings
+float temperature, humidity;
+
+void setup() {
+  // Initialize serial communication for debugging
+  Serial.begin(115200);
+  
+  // Initialize DHT sensor
+  dht.begin();
+  
+  // Initialize LCD
+  lcd.init();
+  lcd.backlight(); // Turn on backlight
+
+  // Connect to WiFi network
+  WiFi.begin(ssid, password);
+  lcd.print("Connecting...");
+  
+  // Wait for WiFi connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  // Display IP address on LCD
+  lcd.clear();
+  lcd.print("IP:");
+  lcd.setCursor(0, 1);
+  lcd.print(WiFi.localIP());
+  Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
+
+  // Configure web server routes
+  server.on("/", handleRoot); // Handle root URL
+  server.begin(); // Start web server
+}
+
+void loop() {
+  server.handleClient(); // Handle incoming client requests
+  readSensor();          // Get new sensor readings
+  updateLCD();           // Update LCD display
+  delay(2000);           // Update interval (2 seconds)
+}
+
+// Read temperature and humidity from DHT22
+void readSensor() {
+  temperature = dht.readTemperature();
+  humidity = dht.readHumidity();
+  
+  // Error checking for sensor readings
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+}
+
+// Update LCD display with current readings
+void updateLCD() {
+  lcd.clear();
+  lcd.print("Temp: " + String(temperature) + "C");
+  lcd.setCursor(0, 1);
+  lcd.print("Humid: " + String(humidity) + "%");
+}
+
+// Web server handler for root path
+void handleRoot() {
+  // Build HTML page using raw string literal
+  String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="2"> <!-- Auto-refresh every 2 seconds -->
+    <title>IoT Weather Station</title>
+    <style>
+        /* Modern styling with gradient background */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        /* Container for content alignment */
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 800px;
+            width: 90%;
+        }
+        /* Header styling with glass effect */
+        .header {
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+        }
+        /* Card layout for sensor data */
+        .cards-container {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+        /* Individual data cards */
+        .card {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 2rem;
+            border-radius: 15px;
+            min-width: 200px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        /* Hover effect for cards */
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        /* Value display styling */
+        .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 1rem 0;
+        }
+        /* Unit text styling */
+        .unit {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+        /* Creator information section */
+        .creator {
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        /* Last updated notification */
+        .last-updated {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+    </style>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-cloud-sun"></i> IoT Weather Station</h1>
+            <p>Real-time Environmental Monitoring System</p>
+        </div>
+
+        <div class="cards-container">
+            <!-- Temperature Card -->
+            <div class="card">
+                <h2><i class="fas fa-thermometer-half"></i> Temperature</h2>
+                <div class="value">)rawliteral";
+                html += String(temperature); // Insert temperature value
+                html += R"rawliteral(<span class="unit">°C</span></div>
+            </div>
+
+            <!-- Humidity Card -->
+            <div class="card">
+                <h2><i class="fas fa-tint"></i> Humidity</h2>
+                <div class="value">)rawliteral";
+                html += String(humidity); // Insert humidity value
+                html += R"rawliteral(<span class="unit">%</span></div>
+            </div>
+        </div>
+
+        <!-- Creator Information -->
+        <div class="creator">
+            <p>Created by: Mbavhalelo Mmbadi (ID: 217057659)</p>
+            <p>IoT Weather Monitoring System Project</p>
+        </div>
+
+        <!-- Update Notification -->
+        <div class="last-updated">
+            <p>Data updates every 2 seconds</p>
+        </div>
+    </div>
+</body>
+</html>
+)rawliteral";
+
+  // Send complete HTML page to client
+  server.send(200, "text/html", html);
+}
